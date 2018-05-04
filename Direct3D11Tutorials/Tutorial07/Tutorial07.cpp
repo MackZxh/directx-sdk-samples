@@ -18,9 +18,12 @@
 #include <directxmath.h>
 #include <directxcolors.h>
 #include "DDSTextureLoader.h"
-#include "resource.h"
-
 using namespace DirectX;
+#include "resource.h"
+#include <comdef.h>
+#include <wrl.h>
+using namespace Microsoft::WRL;
+
 
 //--------------------------------------------------------------------------------------
 // Structures
@@ -55,25 +58,25 @@ HINSTANCE                           g_hInst = nullptr;
 HWND                                g_hWnd = nullptr;
 D3D_DRIVER_TYPE                     g_driverType = D3D_DRIVER_TYPE_NULL;
 D3D_FEATURE_LEVEL                   g_featureLevel = D3D_FEATURE_LEVEL_11_0;
-ID3D11Device*                       g_pd3dDevice = nullptr;
-ID3D11Device1*                      g_pd3dDevice1 = nullptr;
-ID3D11DeviceContext*                g_pImmediateContext = nullptr;
-ID3D11DeviceContext1*               g_pImmediateContext1 = nullptr;
-IDXGISwapChain*                     g_pSwapChain = nullptr;
-IDXGISwapChain1*                    g_pSwapChain1 = nullptr;
-ID3D11RenderTargetView*             g_pRenderTargetView = nullptr;
-ID3D11Texture2D*                    g_pDepthStencil = nullptr;
-ID3D11DepthStencilView*             g_pDepthStencilView = nullptr;
-ID3D11VertexShader*                 g_pVertexShader = nullptr;
-ID3D11PixelShader*                  g_pPixelShader = nullptr;
-ID3D11InputLayout*                  g_pVertexLayout = nullptr;
-ID3D11Buffer*                       g_pVertexBuffer = nullptr;
-ID3D11Buffer*                       g_pIndexBuffer = nullptr;
-ID3D11Buffer*                       g_pCBNeverChanges = nullptr;
-ID3D11Buffer*                       g_pCBChangeOnResize = nullptr;
-ID3D11Buffer*                       g_pCBChangesEveryFrame = nullptr;
-ID3D11ShaderResourceView*           g_pTextureRV = nullptr;
-ID3D11SamplerState*                 g_pSamplerLinear = nullptr;
+ComPtr<ID3D11Device>                       g_pd3dDevice = nullptr;
+ComPtr<ID3D11Device1>                      g_pd3dDevice1 = nullptr;
+ComPtr<ID3D11DeviceContext>                g_pImmediateContext = nullptr;
+ComPtr<ID3D11DeviceContext1>               g_pImmediateContext1 = nullptr;
+ComPtr<IDXGISwapChain>                     g_pSwapChain = nullptr;
+ComPtr<IDXGISwapChain1>                    g_pSwapChain1 = nullptr;
+ComPtr<ID3D11RenderTargetView>             g_pRenderTargetView = nullptr;
+ComPtr<ID3D11Texture2D>                    g_pDepthStencil = nullptr;
+ComPtr<ID3D11DepthStencilView>             g_pDepthStencilView = nullptr;
+ComPtr<ID3D11VertexShader>                 g_pVertexShader = nullptr;
+ComPtr<ID3D11PixelShader>                  g_pPixelShader = nullptr;
+ComPtr<ID3D11InputLayout>                  g_pVertexLayout = nullptr;
+ComPtr<ID3D11Buffer>                       g_pVertexBuffer = nullptr;
+ComPtr<ID3D11Buffer>                       g_pIndexBuffer = nullptr;
+ComPtr<ID3D11Buffer>                       g_pCBNeverChanges = nullptr;
+ComPtr<ID3D11Buffer>                       g_pCBChangeOnResize = nullptr;
+ComPtr<ID3D11Buffer>                       g_pCBChangesEveryFrame = nullptr;
+ComPtr<ID3D11ShaderResourceView>           g_pTextureRV = nullptr;
+ComPtr<ID3D11SamplerState>                 g_pSamplerLinear = nullptr;
 XMMATRIX                            g_World;
 XMMATRIX                            g_View;
 XMMATRIX                            g_Projection;
@@ -108,6 +111,8 @@ int WINAPI wWinMain( _In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
         return 0;
     }
 
+	ShowWindow(g_hWnd, SW_SHOW);
+
     // Main message loop
     MSG msg = {0};
     while( WM_QUIT != msg.message )
@@ -119,7 +124,15 @@ int WINAPI wWinMain( _In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
         }
         else
         {
-            Render();
+			try {
+				Render();
+			}
+			catch (_com_error e) {
+				OutputDebugString(e.Description());
+			}
+			catch (...) {
+				OutputDebugString(L"Exception\n");
+			}
         }
     }
 
@@ -162,8 +175,6 @@ HRESULT InitWindow( HINSTANCE hInstance, int nCmdShow )
     if( !g_hWnd )
         return E_FAIL;
 
-    ShowWindow( g_hWnd, nCmdShow );
-
     return S_OK;
 }
 
@@ -190,7 +201,7 @@ HRESULT CompileShaderFromFile( const WCHAR* szFileName, LPCSTR szEntryPoint, LPC
 #endif
 
     ID3DBlob* pErrorBlob = nullptr;
-    hr = D3DCompileFromFile( szFileName, nullptr, nullptr, szEntryPoint, szShaderModel, 
+    hr = D3DCompileFromFile( szFileName, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, szEntryPoint, szShaderModel,
         dwShaderFlags, 0, ppBlobOut, &pErrorBlob );
     if( FAILED(hr) )
     {
@@ -245,13 +256,13 @@ HRESULT InitDevice()
     {
         g_driverType = driverTypes[driverTypeIndex];
         hr = D3D11CreateDevice( nullptr, g_driverType, nullptr, createDeviceFlags, featureLevels, numFeatureLevels,
-                                D3D11_SDK_VERSION, &g_pd3dDevice, &g_featureLevel, &g_pImmediateContext );
+                                D3D11_SDK_VERSION, g_pd3dDevice.ReleaseAndGetAddressOf(), &g_featureLevel, g_pImmediateContext.ReleaseAndGetAddressOf() );
 
         if ( hr == E_INVALIDARG )
         {
             // DirectX 11.0 platforms will not recognize D3D_FEATURE_LEVEL_11_1 so we need to retry without it
             hr = D3D11CreateDevice( nullptr, g_driverType, nullptr, createDeviceFlags, &featureLevels[1], numFeatureLevels - 1,
-                                    D3D11_SDK_VERSION, &g_pd3dDevice, &g_featureLevel, &g_pImmediateContext );
+                                    D3D11_SDK_VERSION, g_pd3dDevice.ReleaseAndGetAddressOf(), &g_featureLevel, g_pImmediateContext.ReleaseAndGetAddressOf() );
         }
 
         if( SUCCEEDED( hr ) )
@@ -261,20 +272,18 @@ HRESULT InitDevice()
         return hr;
 
     // Obtain DXGI factory from device (since we used nullptr for pAdapter above)
-    IDXGIFactory1* dxgiFactory = nullptr;
+    ComPtr<IDXGIFactory1> dxgiFactory = nullptr;
     {
-        IDXGIDevice* dxgiDevice = nullptr;
-        hr = g_pd3dDevice->QueryInterface( __uuidof(IDXGIDevice), reinterpret_cast<void**>(&dxgiDevice) );
+        ComPtr<IDXGIDevice> dxgiDevice = nullptr;
+        hr = g_pd3dDevice->QueryInterface( __uuidof(IDXGIDevice), reinterpret_cast<void**>(dxgiDevice.ReleaseAndGetAddressOf()) );
         if (SUCCEEDED(hr))
         {
-            IDXGIAdapter* adapter = nullptr;
+            ComPtr<IDXGIAdapter> adapter = nullptr;
             hr = dxgiDevice->GetAdapter(&adapter);
             if (SUCCEEDED(hr))
             {
-                hr = adapter->GetParent( __uuidof(IDXGIFactory1), reinterpret_cast<void**>(&dxgiFactory) );
-                adapter->Release();
+                hr = adapter->GetParent( __uuidof(IDXGIFactory1), reinterpret_cast<void**>(dxgiFactory.ReleaseAndGetAddressOf()) );
             }
-            dxgiDevice->Release();
         }
     }
     if (FAILED(hr))
@@ -286,10 +295,10 @@ HRESULT InitDevice()
     if ( dxgiFactory2 )
     {
         // DirectX 11.1 or later
-        hr = g_pd3dDevice->QueryInterface( __uuidof(ID3D11Device1), reinterpret_cast<void**>(&g_pd3dDevice1) );
+        hr = g_pd3dDevice->QueryInterface( __uuidof(ID3D11Device1), reinterpret_cast<void**>(g_pd3dDevice1.ReleaseAndGetAddressOf()) );
         if (SUCCEEDED(hr))
         {
-            (void) g_pImmediateContext->QueryInterface( __uuidof(ID3D11DeviceContext1), reinterpret_cast<void**>(&g_pImmediateContext1) );
+            (void) g_pImmediateContext->QueryInterface( __uuidof(ID3D11DeviceContext1), reinterpret_cast<void**>(g_pImmediateContext1.ReleaseAndGetAddressOf()) );
         }
 
         DXGI_SWAP_CHAIN_DESC1 sd = {};
@@ -301,10 +310,10 @@ HRESULT InitDevice()
         sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         sd.BufferCount = 1;
 
-        hr = dxgiFactory2->CreateSwapChainForHwnd( g_pd3dDevice, g_hWnd, &sd, nullptr, nullptr, &g_pSwapChain1 );
+        hr = dxgiFactory2->CreateSwapChainForHwnd( g_pd3dDevice.Get(), g_hWnd, &sd, nullptr, nullptr, g_pSwapChain1.ReleaseAndGetAddressOf() );
         if (SUCCEEDED(hr))
         {
-            hr = g_pSwapChain1->QueryInterface( __uuidof(IDXGISwapChain), reinterpret_cast<void**>(&g_pSwapChain) );
+            hr = g_pSwapChain1->QueryInterface( __uuidof(IDXGISwapChain), reinterpret_cast<void**>(g_pSwapChain.ReleaseAndGetAddressOf()) );
         }
 
         dxgiFactory2->Release();
@@ -325,25 +334,22 @@ HRESULT InitDevice()
         sd.SampleDesc.Quality = 0;
         sd.Windowed = TRUE;
 
-        hr = dxgiFactory->CreateSwapChain( g_pd3dDevice, &sd, &g_pSwapChain );
+        hr = dxgiFactory->CreateSwapChain( g_pd3dDevice.Get(), &sd, g_pSwapChain.ReleaseAndGetAddressOf() );
     }
 
     // Note this tutorial doesn't handle full-screen swapchains so we block the ALT+ENTER shortcut
     dxgiFactory->MakeWindowAssociation( g_hWnd, DXGI_MWA_NO_ALT_ENTER );
 
-    dxgiFactory->Release();
-
     if (FAILED(hr))
         return hr;
 
     // Create a render target view
-    ID3D11Texture2D* pBackBuffer = nullptr;
-    hr = g_pSwapChain->GetBuffer( 0, __uuidof( ID3D11Texture2D ), reinterpret_cast<void**>( &pBackBuffer ) );
+    ComPtr<ID3D11Texture2D> pBackBuffer = nullptr;
+    hr = g_pSwapChain->GetBuffer( 0, __uuidof( ID3D11Texture2D ), reinterpret_cast<void**>( pBackBuffer.ReleaseAndGetAddressOf() ) );
     if( FAILED( hr ) )
         return hr;
 
-    hr = g_pd3dDevice->CreateRenderTargetView( pBackBuffer, nullptr, &g_pRenderTargetView );
-    pBackBuffer->Release();
+    hr = g_pd3dDevice->CreateRenderTargetView( pBackBuffer.Get(), nullptr, g_pRenderTargetView.ReleaseAndGetAddressOf() );
     if( FAILED( hr ) )
         return hr;
 
@@ -360,7 +366,7 @@ HRESULT InitDevice()
     descDepth.BindFlags = D3D11_BIND_DEPTH_STENCIL;
     descDepth.CPUAccessFlags = 0;
     descDepth.MiscFlags = 0;
-    hr = g_pd3dDevice->CreateTexture2D( &descDepth, nullptr, &g_pDepthStencil );
+    hr = g_pd3dDevice->CreateTexture2D( &descDepth, nullptr, g_pDepthStencil.ReleaseAndGetAddressOf() );
     if( FAILED( hr ) )
         return hr;
 
@@ -369,11 +375,12 @@ HRESULT InitDevice()
     descDSV.Format = descDepth.Format;
     descDSV.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
     descDSV.Texture2D.MipSlice = 0;
-    hr = g_pd3dDevice->CreateDepthStencilView( g_pDepthStencil, &descDSV, &g_pDepthStencilView );
+    hr = g_pd3dDevice->CreateDepthStencilView( g_pDepthStencil.Get(), &descDSV, g_pDepthStencilView.ReleaseAndGetAddressOf() );
     if( FAILED( hr ) )
         return hr;
 
-    g_pImmediateContext->OMSetRenderTargets( 1, &g_pRenderTargetView, g_pDepthStencilView );
+	ID3D11RenderTargetView* targets[1] = {g_pRenderTargetView.Get()};
+    g_pImmediateContext->OMSetRenderTargets( 1, targets, g_pDepthStencilView.Get());
 
     // Setup the viewport
     D3D11_VIEWPORT vp;
@@ -387,7 +394,7 @@ HRESULT InitDevice()
 
     // Compile the vertex shader
     ID3DBlob* pVSBlob = nullptr;
-    hr = CompileShaderFromFile( L"Tutorial07.fx", "VS", "vs_4_0", &pVSBlob );
+    hr = CompileShaderFromFile( L"Tutorial07_VS.hlsl", "VS", "vs_4_0", &pVSBlob );
     if( FAILED( hr ) )
     {
         MessageBox( nullptr,
@@ -396,7 +403,7 @@ HRESULT InitDevice()
     }
 
     // Create the vertex shader
-    hr = g_pd3dDevice->CreateVertexShader( pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), nullptr, &g_pVertexShader );
+    hr = g_pd3dDevice->CreateVertexShader( pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), nullptr, g_pVertexShader.ReleaseAndGetAddressOf() );
     if( FAILED( hr ) )
     {    
         pVSBlob->Release();
@@ -413,17 +420,17 @@ HRESULT InitDevice()
 
     // Create the input layout
     hr = g_pd3dDevice->CreateInputLayout( layout, numElements, pVSBlob->GetBufferPointer(),
-                                          pVSBlob->GetBufferSize(), &g_pVertexLayout );
+                                          pVSBlob->GetBufferSize(), g_pVertexLayout.ReleaseAndGetAddressOf() );
     pVSBlob->Release();
     if( FAILED( hr ) )
         return hr;
 
     // Set the input layout
-    g_pImmediateContext->IASetInputLayout( g_pVertexLayout );
+    g_pImmediateContext->IASetInputLayout( g_pVertexLayout.Get());
 
     // Compile the pixel shader
     ID3DBlob* pPSBlob = nullptr;
-    hr = CompileShaderFromFile( L"Tutorial07.fx", "PS", "ps_4_0", &pPSBlob );
+    hr = CompileShaderFromFile( L"Tutorial07_PS.hlsl", "PS", "ps_4_0", &pPSBlob );
     if( FAILED( hr ) )
     {
         MessageBox( nullptr,
@@ -432,7 +439,7 @@ HRESULT InitDevice()
     }
 
     // Create the pixel shader
-    hr = g_pd3dDevice->CreatePixelShader( pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &g_pPixelShader );
+    hr = g_pd3dDevice->CreatePixelShader( pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, g_pPixelShader.ReleaseAndGetAddressOf() );
     pPSBlob->Release();
     if( FAILED( hr ) )
         return hr;
@@ -479,14 +486,15 @@ HRESULT InitDevice()
 
     D3D11_SUBRESOURCE_DATA InitData = {};
     InitData.pSysMem = vertices;
-    hr = g_pd3dDevice->CreateBuffer( &bd, &InitData, &g_pVertexBuffer );
+    hr = g_pd3dDevice->CreateBuffer( &bd, &InitData, g_pVertexBuffer.ReleaseAndGetAddressOf() );
     if( FAILED( hr ) )
         return hr;
 
     // Set vertex buffer
-    UINT stride = sizeof( SimpleVertex );
-    UINT offset = 0;
-    g_pImmediateContext->IASetVertexBuffers( 0, 1, &g_pVertexBuffer, &stride, &offset );
+	UINT stride[2] = { sizeof(SimpleVertex), 0 };
+	UINT offset[2] = { 0,0 };
+	ID3D11Buffer* vbs[2] = {g_pVertexBuffer.Get()};
+    g_pImmediateContext->IASetVertexBuffers( 0, 1, vbs, stride, offset );
 
     // Create index buffer
     // Create vertex buffer
@@ -516,12 +524,12 @@ HRESULT InitDevice()
     bd.BindFlags = D3D11_BIND_INDEX_BUFFER;
     bd.CPUAccessFlags = 0;
     InitData.pSysMem = indices;
-    hr = g_pd3dDevice->CreateBuffer( &bd, &InitData, &g_pIndexBuffer );
+    hr = g_pd3dDevice->CreateBuffer( &bd, &InitData, g_pIndexBuffer.ReleaseAndGetAddressOf() );
     if( FAILED( hr ) )
         return hr;
 
     // Set index buffer
-    g_pImmediateContext->IASetIndexBuffer( g_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0 );
+    g_pImmediateContext->IASetIndexBuffer( g_pIndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0 );
 
     // Set primitive topology
     g_pImmediateContext->IASetPrimitiveTopology( D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST );
@@ -531,22 +539,22 @@ HRESULT InitDevice()
     bd.ByteWidth = sizeof(CBNeverChanges);
     bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     bd.CPUAccessFlags = 0;
-    hr = g_pd3dDevice->CreateBuffer( &bd, nullptr, &g_pCBNeverChanges );
+    hr = g_pd3dDevice->CreateBuffer( &bd, nullptr, g_pCBNeverChanges.ReleaseAndGetAddressOf() );
     if( FAILED( hr ) )
         return hr;
     
     bd.ByteWidth = sizeof(CBChangeOnResize);
-    hr = g_pd3dDevice->CreateBuffer( &bd, nullptr, &g_pCBChangeOnResize );
+    hr = g_pd3dDevice->CreateBuffer( &bd, nullptr, g_pCBChangeOnResize.ReleaseAndGetAddressOf() );
     if( FAILED( hr ) )
         return hr;
     
     bd.ByteWidth = sizeof(CBChangesEveryFrame);
-    hr = g_pd3dDevice->CreateBuffer( &bd, nullptr, &g_pCBChangesEveryFrame );
+    hr = g_pd3dDevice->CreateBuffer( &bd, nullptr, g_pCBChangesEveryFrame.ReleaseAndGetAddressOf() );
     if( FAILED( hr ) )
         return hr;
 
     // Load the Texture
-    hr = CreateDDSTextureFromFile( g_pd3dDevice, L"seafloor.dds", nullptr, &g_pTextureRV );
+    hr = CreateDDSTextureFromFile( g_pd3dDevice.Get(), L"seafloor.dds", nullptr, g_pTextureRV.ReleaseAndGetAddressOf() );
     if( FAILED( hr ) )
         return hr;
 
@@ -559,7 +567,7 @@ HRESULT InitDevice()
     sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
     sampDesc.MinLOD = 0;
     sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
-    hr = g_pd3dDevice->CreateSamplerState( &sampDesc, &g_pSamplerLinear );
+    hr = g_pd3dDevice->CreateSamplerState( &sampDesc, g_pSamplerLinear.ReleaseAndGetAddressOf() );
     if( FAILED( hr ) )
         return hr;
 
@@ -574,14 +582,14 @@ HRESULT InitDevice()
 
     CBNeverChanges cbNeverChanges;
     cbNeverChanges.mView = XMMatrixTranspose( g_View );
-    g_pImmediateContext->UpdateSubresource( g_pCBNeverChanges, 0, nullptr, &cbNeverChanges, 0, 0 );
+    g_pImmediateContext->UpdateSubresource( g_pCBNeverChanges.Get(), 0, nullptr, &cbNeverChanges, 0, 0 );
 
     // Initialize the projection matrix
     g_Projection = XMMatrixPerspectiveFovLH( XM_PIDIV4, width / (FLOAT)height, 0.01f, 100.0f );
     
     CBChangeOnResize cbChangesOnResize;
     cbChangesOnResize.mProjection = XMMatrixTranspose( g_Projection );
-    g_pImmediateContext->UpdateSubresource( g_pCBChangeOnResize, 0, nullptr, &cbChangesOnResize, 0, 0 );
+    g_pImmediateContext->UpdateSubresource( g_pCBChangeOnResize.Get(), 0, nullptr, &cbChangesOnResize, 0, 0 );
 
     return S_OK;
 }
@@ -594,25 +602,25 @@ void CleanupDevice()
 {
     if( g_pImmediateContext ) g_pImmediateContext->ClearState();
 
-    if( g_pSamplerLinear ) g_pSamplerLinear->Release();
-    if( g_pTextureRV ) g_pTextureRV->Release();
-    if( g_pCBNeverChanges ) g_pCBNeverChanges->Release();
-    if( g_pCBChangeOnResize ) g_pCBChangeOnResize->Release();
-    if( g_pCBChangesEveryFrame ) g_pCBChangesEveryFrame->Release();
-    if( g_pVertexBuffer ) g_pVertexBuffer->Release();
-    if( g_pIndexBuffer ) g_pIndexBuffer->Release();
-    if( g_pVertexLayout ) g_pVertexLayout->Release();
-    if( g_pVertexShader ) g_pVertexShader->Release();
-    if( g_pPixelShader ) g_pPixelShader->Release();
-    if( g_pDepthStencil ) g_pDepthStencil->Release();
-    if( g_pDepthStencilView ) g_pDepthStencilView->Release();
-    if( g_pRenderTargetView ) g_pRenderTargetView->Release();
-    if( g_pSwapChain1 ) g_pSwapChain1->Release();
-    if( g_pSwapChain ) g_pSwapChain->Release();
-    if( g_pImmediateContext1 ) g_pImmediateContext1->Release();
-    if( g_pImmediateContext ) g_pImmediateContext->Release();
-    if( g_pd3dDevice1 ) g_pd3dDevice1->Release();
-    if( g_pd3dDevice ) g_pd3dDevice->Release();
+    //if( g_pSamplerLinear ) g_pSamplerLinear->Release();
+    //if( g_pTextureRV ) g_pTextureRV->Release();
+    //if( g_pCBNeverChanges ) g_pCBNeverChanges->Release();
+    //if( g_pCBChangeOnResize ) g_pCBChangeOnResize->Release();
+    //if( g_pCBChangesEveryFrame ) g_pCBChangesEveryFrame->Release();
+    //if( g_pVertexBuffer ) g_pVertexBuffer->Release();
+    //if( g_pIndexBuffer ) g_pIndexBuffer->Release();
+    //if( g_pVertexLayout ) g_pVertexLayout->Release();
+    //if( g_pVertexShader ) g_pVertexShader->Release();
+    //if( g_pPixelShader ) g_pPixelShader->Release();
+    //if( g_pDepthStencil ) g_pDepthStencil->Release();
+    //if( g_pDepthStencilView ) g_pDepthStencilView->Release();
+    //if( g_pRenderTargetView ) g_pRenderTargetView->Release();
+    //if( g_pSwapChain1 ) g_pSwapChain1->Release();
+    //if( g_pSwapChain ) g_pSwapChain->Release();
+    //if( g_pImmediateContext1 ) g_pImmediateContext1->Release();
+    //if( g_pImmediateContext ) g_pImmediateContext->Release();
+    //if( g_pd3dDevice1 ) g_pd3dDevice1->Release();
+    //if( g_pd3dDevice ) g_pd3dDevice->Release();
 }
 
 
@@ -677,12 +685,12 @@ void Render()
     //
     // Clear the back buffer
     //
-    g_pImmediateContext->ClearRenderTargetView( g_pRenderTargetView, Colors::MidnightBlue );
+    g_pImmediateContext->ClearRenderTargetView( g_pRenderTargetView.Get(), Colors::MidnightBlue );
 
     //
     // Clear the depth buffer to 1.0 (max depth)
     //
-    g_pImmediateContext->ClearDepthStencilView( g_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0 );
+    g_pImmediateContext->ClearDepthStencilView( g_pDepthStencilView.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0 );
 
     //
     // Update variables that change once per frame
@@ -690,23 +698,30 @@ void Render()
     CBChangesEveryFrame cb;
     cb.mWorld = XMMatrixTranspose( g_World );
     cb.vMeshColor = g_vMeshColor;
-    g_pImmediateContext->UpdateSubresource( g_pCBChangesEveryFrame, 0, nullptr, &cb, 0, 0 );
+    g_pImmediateContext->UpdateSubresource( g_pCBChangesEveryFrame.Get(), 0, nullptr, &cb, 0, 0 );
 
     //
     // Render the cube
     //
-    g_pImmediateContext->VSSetShader( g_pVertexShader, nullptr, 0 );
-    g_pImmediateContext->VSSetConstantBuffers( 0, 1, &g_pCBNeverChanges );
-    g_pImmediateContext->VSSetConstantBuffers( 1, 1, &g_pCBChangeOnResize );
-    g_pImmediateContext->VSSetConstantBuffers( 2, 1, &g_pCBChangesEveryFrame );
-    g_pImmediateContext->PSSetShader( g_pPixelShader, nullptr, 0 );
-    g_pImmediateContext->PSSetConstantBuffers( 2, 1, &g_pCBChangesEveryFrame );
-    g_pImmediateContext->PSSetShaderResources( 0, 1, &g_pTextureRV );
-    g_pImmediateContext->PSSetSamplers( 0, 1, &g_pSamplerLinear );
+    g_pImmediateContext->VSSetShader( g_pVertexShader.Get(), nullptr, 0 );
+	//ID3D11Buffer* constants[2] = {g_pCBNeverChanges.Get(), g_pCBChangeOnResize.Get() };
+
+    g_pImmediateContext->VSSetConstantBuffers( 0, 1, g_pCBNeverChanges.GetAddressOf() );
+    g_pImmediateContext->VSSetConstantBuffers( 1, 1,  g_pCBChangeOnResize.GetAddressOf());
+	//constants[0] = ;
+    g_pImmediateContext->VSSetConstantBuffers( 2, 1, g_pCBChangesEveryFrame.GetAddressOf());
+    g_pImmediateContext->PSSetShader( g_pPixelShader.Get(), nullptr, 0 );
+    g_pImmediateContext->PSSetConstantBuffers( 2, 1, g_pCBChangesEveryFrame.GetAddressOf());
+    g_pImmediateContext->PSSetShaderResources( 0, 1, g_pTextureRV.GetAddressOf() );
+    g_pImmediateContext->PSSetSamplers( 0, 1, g_pSamplerLinear.GetAddressOf() );
+
     g_pImmediateContext->DrawIndexed( 36, 0, 0 );
 
     //
     // Present our back buffer to our front buffer
     //
-    g_pSwapChain->Present( 0, 0 );
+   HRESULT hr = g_pSwapChain->Present( 1, 0 );
+   if (FAILED(hr)) {
+	   OutputDebugString(L"Exception present\n");
+   }
 }
